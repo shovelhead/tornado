@@ -1,3 +1,5 @@
+""" Hacked for simplejson and handling datetime and decimal objects.  Requires django"""
+
 #!/usr/bin/env python
 #
 # Copyright 2009 Facebook
@@ -20,27 +22,47 @@ import htmlentitydefs
 import re
 import xml.sax.saxutils
 import urllib
+import decimal
+import datetime
+from django.utils import datetime_safe
 
+# removed any std python imports for json.
 try:
-    import json
-    assert hasattr(json, "loads") and hasattr(json, "dumps")
-    _json_decode = lambda s: json.loads(s)
-    _json_encode = lambda v: json.dumps(v)
-except:
+    import simplejson
+    # included custom encoder
+    _json_decode = lambda s: simplejson.loads(_unicode(s), parse_float=decimal.Decimal)
+    _json_encode = lambda v: simplejson.dumps(v, default=MyJSONEncoder().default)
+except ImportError:
     try:
-        import simplejson
+        # For Google AppEngine
+        from django.utils import simplejson
         _json_decode = lambda s: simplejson.loads(_unicode(s))
         _json_encode = lambda v: simplejson.dumps(v)
     except ImportError:
-        try:
-            # For Google AppEngine
-            from django.utils import simplejson
-            _json_decode = lambda s: simplejson.loads(_unicode(s))
-            _json_encode = lambda v: simplejson.dumps(v)
-        except ImportError:
-            raise Exception("A JSON parser is required, e.g., simplejson at "
+        raise Exception("A JSON parser is required, e.g., simplejson at "
                             "http://pypi.python.org/pypi/simplejson/")
 
+class MyJSONEncoder(simplejson.JSONEncoder):
+    """
+    JSONEncoder subclass that knows how to encode date/time and decimal types.
+    """
+
+    DATE_FORMAT = "%Y-%m-%d"
+    TIME_FORMAT = "%H:%M:%S"
+
+    def default(self, o):
+        if isinstance(o, datetime.datetime):
+            d = datetime_safe.new_datetime(o)
+            return d.strftime("%s %s" % (self.DATE_FORMAT, self.TIME_FORMAT))
+        elif isinstance(o, datetime.date):
+            d = datetime_safe.new_date(o)
+            return d.strftime(self.DATE_FORMAT)
+        elif isinstance(o, datetime.time):
+            return o.strftime(self.TIME_FORMAT)
+        elif isinstance(o, decimal.Decimal):
+            return str(o)
+        else:
+            return super(MyJSONEncoder, self).default(o)
 
 def xhtml_escape(value):
     """Escapes a string so it is valid within XML or XHTML."""

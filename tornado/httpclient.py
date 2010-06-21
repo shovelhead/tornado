@@ -138,7 +138,7 @@ class AsyncHTTPClient(object):
         self._multi.close()
         self._closed = True
 
-    def fetch(self, request, callback, **kwargs):
+    def fetch(self, request, callback, proxy=None, **kwargs):
         """Executes an HTTPRequest, calling callback with an HTTPResponse.
 
         If an error occurs during the fetch, the HTTPResponse given to the
@@ -146,6 +146,10 @@ class AsyncHTTPClient(object):
         encountered during the request. You can call response.reraise() to
         throw the exception (if any) in the callback.
         """
+        if proxy:
+          self.proxy = proxy
+        else:
+          self.proxy = None
         if not isinstance(request, HTTPRequest):
            request = HTTPRequest(url=request, **kwargs)
         self._requests.append((request, callback))
@@ -203,7 +207,7 @@ class AsyncHTTPClient(object):
                     "start_time": time.time(),
                 }
                 _curl_setup_request(curl, request, curl.info["buffer"],
-                                    curl.info["headers"])
+                                    curl.info["headers"], self.proxy)
                 self._multi.add_handle(curl)
 
             if not started and not completed:
@@ -598,7 +602,11 @@ def _curl_create(max_simultaneous_connections=None):
     return curl
 
 
-def _curl_setup_request(curl, request, buffer, headers):
+def _curl_setup_request(curl, request, buffer, headers, proxy=None):
+    if proxy:
+      curl.setopt(pycurl.PROXY, proxy['PROXY'] )
+      curl.setopt(pycurl.PROXYPORT, proxy['PROXYPORT'])
+      
     curl.setopt(pycurl.URL, request.url)
     curl.setopt(pycurl.HTTPHEADER,
                 ["%s: %s" % i for i in request.headers.iteritems()])
